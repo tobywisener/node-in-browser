@@ -312,12 +312,12 @@
         _handleWrapQueue.push(this);
 
         if (fd === 0) {
-          const onChar = (c: string) => {
-            //if (this.reading) {
-            const buffer = new TextEncoder().encode(c);
-            this.onread(buffer.length, buffer);
-            // }
-          };
+          // const onChar = (c: string) => {
+          //   //if (this.reading) {
+          //   const buffer = new TextEncoder().encode(c);
+          //   this.onread(buffer.length, buffer);
+          //   // }
+          // };
           selfAny.onmessage = (msg: MessageEvent) => {
             if (msg.data.type !== "stdin") return;
             // onChar(msg.data.ch);
@@ -326,8 +326,8 @@
         }
       }
 
-      public onread: (nread: number, buffer: Buffer) => void;
-      public reading: boolean;
+      // public onread: (nread: number, buffer: Buffer) => void;
+      // public reading: boolean;
 
       public getWindowSize(size: [number, number]): any /*error*/ {
         size[0] = 120; // cols
@@ -434,7 +434,7 @@
     }
 
     class FSReqWrap {
-      public oncomplete: Function;
+      public oncomplete: Function = null as any;
     }
 
     let cwd = "/mnt";
@@ -578,7 +578,7 @@
             const wrap = <T>(f: () => T, req: FSReqWrap | undefined): T => {
               let result: T | undefined = undefined;
               let err: Error | undefined = undefined;
-              try { result = f(); } catch (e) { err = e; }
+              try { result = f(); } catch (e) { err = e as Error; }
               if (req) nextTick(() => req.oncomplete(err, result));
               else if (err) throw err;
               return result as any;
@@ -613,7 +613,7 @@
               fstat: fstat,
               lstat: (path: string, req?: FSReqWrap) => {
                 try {
-                  try { let buffer = readFileSync(path); if (buffer) return fstat({ s: buffer, isDir: false }, req); } catch{ }
+                  try { let buffer = readFileSync(path); if (buffer) return fstat({ s: buffer, isDir: false }, req); } catch { }
                   if (readDirSync(path)) return fstat({ s: new Uint8Array(0), isDir: true }, req);
                   err("TODO: correct error treatment");
                 } catch {
@@ -623,7 +623,7 @@
               },
               stat: (path: string, req?: FSReqWrap) => {
                 try {
-                  try { let buffer = readFileSync(path); if (buffer) return fstat({ s: buffer, isDir: false }, req); } catch{ }
+                  try { let buffer = readFileSync(path); if (buffer) return fstat({ s: buffer, isDir: false }, req); } catch { }
                   if (readDirSync(path)) return fstat({ s: new Uint8Array(0), isDir: true }, req);
                   err("TODO: correct error treatment");
                 } catch {
@@ -631,9 +631,14 @@
                   return;
                 }
               },
+              ftruncate: (fd: FileDescriptor, len: number, req?: FSReqWrap) => {
+                // TODO
+                wrap<undefined>(() => undefined, req);
+              },
               open: (path: string, flags: number, mode: number, req?: FSReqWrap): FileDescriptor => {
                 return wrap<FileDescriptor>(() => {
                   if (flags === 0) return { s: readFileSync(path), isDir: false };
+                  if (flags === 2) return { s: readFileSync(path), isDir: false };
                   if (flags === 266) return { s: readFileSync(path), isDir: false };
                   // debugger;
                   return errNotImpl();
@@ -819,7 +824,9 @@
       chdir: (target: string) => { cwd = require("path").resolve(cwd, target) },
       cwd: () => cwd,
       env: {
+        // TODO: make specifyable from outside, like vfs
         // NODE_DEBUG: "repl,timer,stream,esm,module,net"
+        NODE_REPL_HISTORY: ""
       },
       execPath: "/bin/node/app.js",
       moduleLoadList: [] as string[],

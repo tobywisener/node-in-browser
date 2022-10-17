@@ -4,22 +4,20 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "postinstall": "shx cp -r node_modules/xterm/dist www/xterm && pushd \"test/browserRunner\" && npm install && popd && git config --global core.longpaths true && shx rm -rf www/node && git clone --depth 1 https://github.com/olydis/node www/node && pushd \"www/node\" && git filter-branch --prune-empty --subdirectory-filter lib HEAD && shx rm -rf .git && popd",
+    "postinstall": "shx rm -rf www/xterm && shx cp -r node_modules/xterm/lib www/xterm && shx cp node_modules/xterm/css/xterm.css www/xterm && cd \"test/browserRunner\" && npm install && cd ../.. && git config --global core.longpaths true && shx rm -rf www/node && git clone --depth 1 https://github.com/olydis/node www/node && cd \"www/node\" && git filter-branch --prune-empty --subdirectory-filter lib HEAD && shx rm -rf .git && cd ../..",
     "start": "http-server www -p 8000 -i false -c-1\"",
     "test": "mocha test --timeout 60000",
-    "build": "start cmd /c \"cd nodeos/host && tsc -w\" && start cmd /c \"cd nodeos/node && tsc -w\""
+    "build": "concurrently --passthrough-arguments \"cd nodeos/host && tsc {@}\" \"cd nodeos/node && tsc {@}\""
   },
   "author": "Johannes Bader",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^8.0.28",
-    "@types/xterm": "^2.0.3",
-    "http-server": "^0.10.0",
-    "mocha": "^4.0.1",
-    "typescript": "^2.5.2"
-  },
-  "dependencies": {
-    "shx": "^0.2.2",
-    "xterm": "^2.9.2"
+    "concurrently": "^7.4.0",
+    "http-server": "^14.1.1",
+    "mocha": "^10.0.0",
+    "shx": "^0.3.4",
+    "typescript": "^4.8.3",
+    "xterm": "^5.0.0"
   }
 }

@@ -1,16 +1,20 @@
 /// <reference path="../../types/vfs.ts" />
 /// <reference path="../../types/env.ts" />
-/// <reference path="../../../node_modules/@types/xterm/index.d.ts" />
+/// <reference path="../../../node_modules/xterm/typings/xterm.d.ts" />
+/// <reference path="./xterm.d.ts" />
 
-eval("self.Xterm = Terminal"); // alias, somehow the typings talk about "Xterm"
-const terminal = new Xterm(<Xterm.IOptions>{ cursorBlink: true, cols: 120, rows: 30, convertEol: true, });
+const terminal = new Terminal({
+  cursorBlink: true,
+  cols: 120, rows: 30,
+  convertEol: true,
+});
 
 /**
  * Represents an execution environment, i.e. virtual OS with architecture, FS, etc.
  * Can host multiple workers that will have a consistent view of the FS, process.arch, etc.
  */
 class VirtualMachine {
-  public constructor(private fs: VirtualFileSystem, private terminal: Xterm) {
+  public constructor(private fs: VirtualFileSystem, private terminal: Terminal) {
 
   }
 
@@ -18,11 +22,11 @@ class VirtualMachine {
     switch (func) {
       case "stdout":
         this.terminal.write(arg);
-        eval("document").getElementById("stdout").textContent += arg;
+        document.getElementById("stdout")!.textContent += arg;
         break;
       case "stderr":
         this.terminal.write(arg);
-        eval("document").getElementById("stderr").textContent += arg;
+        document.getElementById("stderr")!.textContent += arg;
         break;
       case "error":
         this.terminal.write("[Runtime Error]\n");
@@ -32,7 +36,6 @@ class VirtualMachine {
         break;
       // case "__trace.fs":
       // case "__trace.require":
-      //   eval("document").getElementById("console").textContent += `[${func}] ${arg}\n`;
       //   break;
       // case "__trace.fs":
       //   console.log(JSON.stringify(arg, null, 2));
@@ -51,8 +54,8 @@ class VirtualMachine {
    * Dummy entry point for "node" binary. Long term, this should be hooked into the FS somehow and resolved via $PATH etc.
    */
   public node(args: string[], keepAlive: boolean = false): void {
-    eval("document").getElementById("stdout").textContent = "";
-    eval("document").getElementById("stderr").textContent = "";
+    document.getElementById("stdout")!.textContent = "";
+    document.getElementById("stderr")!.textContent = "";
     this.terminal.clear();
     const vm = this;
     const worker = new Worker("/bin/node/app.js");
@@ -62,7 +65,7 @@ class VirtualMachine {
     const env: Environment = { fs: this.fs, cwd: "/cwd" };
     worker.postMessage({ type: "start", args, env });
 
-    this.terminal.on("data", (ch: string) => {
+    this.terminal.onData((ch: string) => {
       if (ch.length > 8) { // assume paste (TODO: clean, see VSCode recent developments)
         worker.postMessage({
           type: "stdin",
@@ -78,16 +81,17 @@ class VirtualMachine {
         }
       }
     });
-    this.terminal.on("key", (ch: string, key) => {
+    this.terminal.onKey(({ key, domEvent }) => {
+      // console.log(key, domEvent.key, domEvent.code);
       worker.postMessage({
         type: "stdin",
-        ch: ch,
+        ch: key,
         key: {
-          name: key.key.toLowerCase().replace(/^arrow/, ""),
-          ctrl: key.ctrlKey,
-          shift: key.shiftKey,
-          meta: key.metaKey,
-          alt: key.altKey
+          name: domEvent.key.toLowerCase().replace(/^arrow/, ""),
+          ctrl: domEvent.ctrlKey,
+          shift: domEvent.shiftKey,
+          meta: domEvent.metaKey,
+          alt: domEvent.altKey
         }
       });
     });
@@ -96,7 +100,7 @@ class VirtualMachine {
 
 function dragover_handler(ev: DragEvent) {
   ev.preventDefault();
-  ev.dataTransfer.dropEffect = "link";
+  ev.dataTransfer!.dropEffect = "link";
 }
 
 async function drop_handler(ev: DragEvent) {
@@ -114,10 +118,9 @@ async function drop_handler(ev: DragEvent) {
             todo.add(name);
             const reader = new FileReader();
             reader.onloadend = () => {
-              fs[name] = new Uint8Array(reader.result);
+              fs[name] = new Uint8Array(reader.result as ArrayBufferLike);
               todo.delete(name);
-              // console.log(name);
-              (document.getElementById("status") as any).textContent = name;
+              console.log(name);
               res();
             };
             reader.onerror = () => console.error(name);
@@ -139,14 +142,13 @@ async function drop_handler(ev: DragEvent) {
       await Promise.all(jobs);
     }
   };
-  var items = ev.dataTransfer.items;
+  var items = ev.dataTransfer!.items;
   for (var i = 0; i < items.length; ++i) {
     const item = items[i];
     if (item.kind != "file")
       continue;
     await traverse(item.webkitGetAsEntry(), "/");
   }
-  (document.getElementById("status") as any).textContent = "";
 
   console.log("done loading");
   const firstPath = Object.keys(fs)[0];
@@ -160,20 +162,20 @@ async function drop_handler(ev: DragEvent) {
 }
 function load() {
   const terminalDiv = document.getElementById("xterm") as HTMLElement;
-  terminal.open(terminalDiv, true);
+  terminal.open(terminalDiv);
   const term = terminal as any;
   const resize = () => {
-    const cw = term.charMeasure.width;
-    const ch = term.charMeasure.height;
+    const cw = term._core._renderService.dimensions.actualCellWidth;
+    const ch = term._core._renderService.dimensions.actualCellHeight;
     if (cw && ch)
       terminal.resize(terminalDiv.clientWidth / cw | 0, terminalDiv.clientHeight / ch | 0);
     // TODO: need to communicate that to process!
   };
-  terminal.on("title", title => document.title = title); // console.log(`${String.fromCharCode(27)}]0;${title}${String.fromCharCode(7)}`)
+  terminal.onTitleChange(title => document.title = title); // console.log(`${String.fromCharCode(27)}]0;${title}${String.fromCharCode(7)}`)
   (document.body as any).onresize = resize;
   setInterval(resize, 500);
 
-  new VirtualMachine({}, terminal).node([], false)
+  new VirtualMachine({ /* "/home/runner/.node_repl_history": new Uint8Array() // disabled via NODE_REPL_HISTORY */ }, terminal).node([], false)
   // new VirtualMachine({}, terminal).node(["node_modules/npm", "install", "--no-save", "semver"], false)
   // new VirtualMachine({}, terminal).node(["node_modules/npm", "help"], false)
 }
